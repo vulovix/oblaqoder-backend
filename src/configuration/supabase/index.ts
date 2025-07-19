@@ -14,7 +14,4 @@ if (!supabaseUrl || !supabaseKey) {
 
 // ✅ Disable both unsafe-call and unsafe-assignment
 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-export const supabase: SupabaseClient<any, any, any, any> = createClient(
-  supabaseUrl,
-  supabaseKey,
-);
+export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
