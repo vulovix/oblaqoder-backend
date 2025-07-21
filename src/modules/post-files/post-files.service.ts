@@ -1,5 +1,4 @@
-// src/post-files/post-files.service.ts
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { SupabaseStorageService } from '../../services/SupabaseStorage.service';
 import { db } from '../../configuration/db';
 import { postFilesTable } from '../../configuration/db/schema';
@@ -18,11 +17,17 @@ export class PostFilesService {
       .where(eq(postFilesTable.postId, postId));
 
     if (!files.length) {
+      // check if there's junk data in bucket
+      const data = await this.storage.getFolder(
+        `post-files`,
+        `posts/${postId}`,
+      );
+      const paths = data.map((x) => `posts/${postId}/${x.name}`);
+      await this.storage.delete('post-files', paths);
       return;
     }
 
     const filePaths = files.map((file) => file.filePath);
-    // Delete from Supabase
     await this.storage.delete('post-files', filePaths);
 
     // Delete metadata from DB

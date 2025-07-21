@@ -68,4 +68,16 @@ export class SupabaseStorageService {
 
     return result.data;
   }
+  async getFolder(
+    bucket: string,
+    folder: string,
+  ): Promise<{ id: string; name: string }[]> {
+    const result = await supabase.storage.from(bucket).list(folder);
+
+    if (result.error !== null || result.data === null) {
+      throw new Error(`Delete failed: ${result.error?.message}`);
+    }
+
+    return result.data;
+  }
 }
