@@ -1,5 +1,5 @@
 // src/post-files/post-files.service.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { SupabaseStorageService } from '../../services/SupabaseStorage.service';
 import { db } from '../../configuration/db';
 import { postFilesTable } from '../../configuration/db/schema';
@@ -17,10 +17,11 @@ export class PostFilesService {
       .from(postFilesTable)
       .where(eq(postFilesTable.postId, postId));
 
-    if (!files.length) return;
+    if (!files.length) {
+      return;
+    }
 
     const filePaths = files.map((file) => file.filePath);
-
     // Delete from Supabase
     await this.storage.delete('post-files', filePaths);
 

@@ -43,4 +43,9 @@ export class PostFilesController {
   async getByPost(@Param('postId', ParseIntPipe) postId: number) {
     return await this.filesService.getFilesForPost(postId);
   }
+
+  @Delete('by-post/:postId')
+  async deleteByPost(@Param('postId', ParseIntPipe) postId: number) {
+    return await this.filesService.deleteFilesForPost(postId);
+  }
 }

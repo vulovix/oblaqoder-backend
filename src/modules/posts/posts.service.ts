@@ -301,11 +301,39 @@ export class PostsService {
   }
 
   async updatePost(id: number, update: Partial<InsertPost>) {
-    return db
+    await db
       .update(postsTable)
       .set({ ...update, updatedAt: new Date() })
       .where(eq(postsTable.id, id))
       .returning();
+
+    const post = await db.query.postsTable.findFirst({
+      with: {
+        files: true,
+        user: {
+          columns: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      where: eq(postsTable.id, id),
+    });
+
+    const postWithFiles = {
+      ...post,
+      files: await Promise.all(
+        post.files.map(async (file) => ({
+          ...file,
+          publicUrl: await this.storage.getSignedUrl(
+            file.bucket,
+            file.filePath,
+          ),
+        })),
+      ),
+    };
+
+    return postWithFiles;
   }
 
   async getPostsByCategory(categoryId: number) {
