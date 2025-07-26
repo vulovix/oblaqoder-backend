@@ -209,3 +209,7 @@ export type SelectCommunity = typeof communitiesTable.$inferSelect;
 
 export type InsertCategory = typeof categoriesTable.$inferInsert;
 export type SelectCategory = typeof categoriesTable.$inferSelect;
+
+export type InsertPostCategory = typeof postCategoriesTable.$inferInsert;
+export type InsertPostCollection = typeof postCollectionsTable.$inferInsert;
+export type InsertPostCommunity = typeof postCommunitiesTable.$inferInsert;

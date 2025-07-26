@@ -1,7 +1,12 @@
 // src/posts/posts.service.ts
 import { Injectable } from '@nestjs/common';
 import { db } from '../../configuration/db';
-import { postsTable } from '../../configuration/db/schema';
+import {
+  InsertPostCategory,
+  InsertPostCollection,
+  InsertPostCommunity,
+  postsTable,
+} from '../../configuration/db/schema';
 import { CreatePostDto } from './dto/create-post.dto';
 import { eq } from 'drizzle-orm';
 import { InsertPost } from '../../configuration/db/schema';
@@ -419,6 +424,135 @@ export class PostsService {
       })),
     );
   }
+  // async getPaginatedPostsByCategory(
+  //   categoryId: number,
+  //   limit: number,
+  //   offset: number,
+  // ) {
+  //   const postIds = await db
+  //     .select({ postId: postCategoriesTable.postId })
+  //     .from(postCategoriesTable)
+  //     .where(eq(postCategoriesTable.categoryId, categoryId));
+
+  //   const ids = postIds.map((r) => r.postId);
+  //   const posts = await db.query.postsTable.findMany({
+  //     where: (post, { inArray }) => inArray(post.id, ids),
+  //     with: {
+  //       files: true,
+  //       user: {
+  //         columns: {
+  //           id: true,
+  //           name: true,
+  //         },
+  //       },
+  //     },
+  //     limit,
+  //     offset,
+  //     orderBy: (posts, { desc }) => [desc(posts.createdAt)],
+  //   });
+
+  //   return Promise.all(
+  //     posts.map(async (post) => ({
+  //       ...post,
+  //       files: await Promise.all(
+  //         post.files.map(async (file) => ({
+  //           ...file,
+  //           publicUrl: await this.storage.getSignedUrl(
+  //             file.bucket,
+  //             file.filePath,
+  //           ),
+  //         })),
+  //       ),
+  //     })),
+  //   );
+  // }
+
+  // async getPaginatedPostsByCollection(
+  //   collectionId: number,
+  //   limit: number,
+  //   offset: number,
+  // ) {
+  //   const postIds = await db
+  //     .select({ postId: postCollectionsTable.postId })
+  //     .from(postCollectionsTable)
+  //     .where(eq(postCollectionsTable.collectionId, collectionId));
+
+  //   const ids = postIds.map((r) => r.postId);
+  //   const posts = await db.query.postsTable.findMany({
+  //     where: (post, { inArray }) => inArray(post.id, ids),
+  //     with: {
+  //       files: true,
+  //       user: {
+  //         columns: {
+  //           id: true,
+  //           name: true,
+  //         },
+  //       },
+  //     },
+  //     limit,
+  //     offset,
+  //     orderBy: (posts, { desc }) => [desc(posts.createdAt)],
+  //   });
+
+  //   return Promise.all(
+  //     posts.map(async (post) => ({
+  //       ...post,
+  //       files: await Promise.all(
+  //         post.files.map(async (file) => ({
+  //           ...file,
+  //           publicUrl: await this.storage.getSignedUrl(
+  //             file.bucket,
+  //             file.filePath,
+  //           ),
+  //         })),
+  //       ),
+  //     })),
+  //   );
+  // }
+
+  // async getPaginatedPostsByCommunity(
+  //   communityId: number,
+  //   limit: number,
+  //   offset: number,
+  // ) {
+  //   const postIds = await db
+  //     .select({ postId: postCommunitiesTable.postId })
+  //     .from(postCommunitiesTable)
+  //     .where(eq(postCommunitiesTable.communityId, communityId));
+
+  //   const ids = postIds.map((r) => r.postId);
+  //   const posts = await db.query.postsTable.findMany({
+  //     where: (post, { inArray }) => inArray(post.id, ids),
+  //     with: {
+  //       files: true,
+  //       user: {
+  //         columns: {
+  //           id: true,
+  //           name: true,
+  //         },
+  //       },
+  //     },
+  //     limit,
+  //     offset,
+  //     orderBy: (posts, { desc }) => [desc(posts.createdAt)],
+  //   });
+
+  //   return Promise.all(
+  //     posts.map(async (post) => ({
+  //       ...post,
+  //       files: await Promise.all(
+  //         post.files.map(async (file) => ({
+  //           ...file,
+  //           publicUrl: await this.storage.getSignedUrl(
+  //             file.bucket,
+  //             file.filePath,
+  //           ),
+  //         })),
+  //       ),
+  //     })),
+  //   );
+  // }
+
   async getPaginatedPostsByCategory(
     categoryId: number,
     limit: number,
@@ -430,6 +564,7 @@ export class PostsService {
       .where(eq(postCategoriesTable.categoryId, categoryId));
 
     const ids = postIds.map((r) => r.postId);
+
     const posts = await db.query.postsTable.findMany({
       where: (post, { inArray }) => inArray(post.id, ids),
       with: {
@@ -439,6 +574,15 @@ export class PostsService {
             id: true,
             name: true,
           },
+        },
+        categories: {
+          with: { category: true },
+        },
+        collections: {
+          with: { collection: true },
+        },
+        communities: {
+          with: { community: true },
         },
       },
       limit,
@@ -458,6 +602,9 @@ export class PostsService {
             ),
           })),
         ),
+        categories: post.categories.map((pc) => pc.category),
+        collections: post.collections.map((pc) => pc.collection),
+        communities: post.communities.map((pc) => pc.community),
       })),
     );
   }
@@ -473,6 +620,7 @@ export class PostsService {
       .where(eq(postCollectionsTable.collectionId, collectionId));
 
     const ids = postIds.map((r) => r.postId);
+
     const posts = await db.query.postsTable.findMany({
       where: (post, { inArray }) => inArray(post.id, ids),
       with: {
@@ -482,6 +630,15 @@ export class PostsService {
             id: true,
             name: true,
           },
+        },
+        categories: {
+          with: { category: true },
+        },
+        collections: {
+          with: { collection: true },
+        },
+        communities: {
+          with: { community: true },
         },
       },
       limit,
@@ -501,6 +658,9 @@ export class PostsService {
             ),
           })),
         ),
+        categories: post.categories.map((pc) => pc.category),
+        collections: post.collections.map((pc) => pc.collection),
+        communities: post.communities.map((pc) => pc.community),
       })),
     );
   }
@@ -516,6 +676,7 @@ export class PostsService {
       .where(eq(postCommunitiesTable.communityId, communityId));
 
     const ids = postIds.map((r) => r.postId);
+
     const posts = await db.query.postsTable.findMany({
       where: (post, { inArray }) => inArray(post.id, ids),
       with: {
@@ -525,6 +686,15 @@ export class PostsService {
             id: true,
             name: true,
           },
+        },
+        categories: {
+          with: { category: true },
+        },
+        collections: {
+          with: { collection: true },
+        },
+        communities: {
+          with: { community: true },
         },
       },
       limit,
@@ -544,28 +714,58 @@ export class PostsService {
             ),
           })),
         ),
+        categories: post.categories.map((pc) => pc.category),
+        collections: post.collections.map((pc) => pc.collection),
+        communities: post.communities.map((pc) => pc.community),
       })),
     );
   }
 
-  async assignToCategory(postId: number, categoryId: number) {
+  async assignToCategory(
+    postId: number,
+    categoryId: number,
+  ): Promise<InsertPostCategory[]> {
     return db
       .insert(postCategoriesTable)
       .values({ postId, categoryId })
       .returning();
   }
 
-  async assignToCollection(postId: number, collectionId: number) {
+  async assignToCollection(
+    postId: number,
+    collectionId: number,
+  ): Promise<InsertPostCollection[]> {
     return db
       .insert(postCollectionsTable)
       .values({ postId, collectionId })
       .returning();
   }
 
-  async assignToCommunity(postId: number, communityId: number) {
+  async assignToCommunity(
+    postId: number,
+    communityId: number,
+  ): Promise<InsertPostCommunity[]> {
     return db
       .insert(postCommunitiesTable)
       .values({ postId, communityId })
       .returning();
+  }
+
+  async removePostCategoryRelation(postId: number) {
+    await db
+      .delete(postCategoriesTable)
+      .where(eq(postCategoriesTable.postId, postId));
+  }
+
+  async removePostCollectionRelation(postId: number) {
+    await db
+      .delete(postCollectionsTable)
+      .where(eq(postCollectionsTable.postId, postId));
+  }
+
+  async removePostCommunityRelation(postId: number) {
+    await db
+      .delete(postCommunitiesTable)
+      .where(eq(postCommunitiesTable.postId, postId));
   }
 }

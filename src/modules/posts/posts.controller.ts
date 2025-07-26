@@ -11,6 +11,11 @@ import {
 } from '@nestjs/common';
 import { PostsService } from './posts.service';
 import { CreatePostDto } from './dto/create-post.dto';
+import {
+  InsertPostCategory,
+  InsertPostCollection,
+  InsertPostCommunity,
+} from 'src/configuration/db/schema';
 
 @Controller('posts')
 export class PostsController {
@@ -133,5 +138,56 @@ export class PostsController {
     @Param('collectionId') collectionId: string,
   ) {
     return this.postsService.assignToCollection(+postId, +collectionId);
+  }
+
+  @Put(':postId/categories/:categoryId')
+  async reassignCategory(
+    @Param('postId') postId: string,
+    @Param('categoryId') categoryId: string,
+  ): Promise<InsertPostCategory[]> {
+    await this.postsService.removePostCategoryRelation(+postId);
+    return this.postsService.assignToCategory(+postId, +categoryId);
+  }
+
+  @Put(':postId/collections/:collectionId')
+  async reassignCollection(
+    @Param('postId') postId: string,
+    @Param('collectionId') collectionId: string,
+  ): Promise<InsertPostCollection[]> {
+    await this.postsService.removePostCollectionRelation(+postId);
+    return this.postsService.assignToCollection(+postId, +collectionId);
+  }
+
+  @Put(':postId/communities/:communityId')
+  async reassignCommunity(
+    @Param('postId') postId: string,
+    @Param('communityId') communityId: string,
+  ): Promise<InsertPostCommunity[]> {
+    await this.postsService.removePostCommunityRelation(+postId);
+    return this.postsService.assignToCommunity(+postId, +communityId);
+  }
+
+  @Delete(':postId/categories/:categoryId')
+  async unassignCategory(
+    @Param('postId') postId: string,
+    // @Param('categoryId') categoryId: string,
+  ) {
+    await this.postsService.removePostCategoryRelation(+postId);
+  }
+
+  @Delete(':postId/collections/:collectionId')
+  async unassignCollection(
+    @Param('postId') postId: string,
+    // @Param('collectionId') collectionId: string,
+  ) {
+    await this.postsService.removePostCollectionRelation(+postId);
+  }
+
+  @Delete(':postId/communities/:communityId')
+  async unassignCommunity(
+    @Param('postId') postId: string,
+    // @Param('communityId') communityId: string,
+  ) {
+    await this.postsService.removePostCommunityRelation(+postId);
   }
 }
