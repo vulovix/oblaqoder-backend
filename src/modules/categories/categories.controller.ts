@@ -21,6 +21,7 @@ export class CategoriesController {
     private readonly postsService: PostsService,
   ) {}
 
+  @UseGuards(JwtCookieAuthGuard)
   @Post()
   create(@Body() dto: CreateCategoryDto) {
     return this.categoriesService.create(dto);
@@ -37,31 +38,37 @@ export class CategoriesController {
     return this.categoriesService.findAll();
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.categoriesService.findOne(+id);
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Get(':id/user')
   findOneWithUser(@Param('id') id: string) {
     return this.categoriesService.findOneWithUser(+id);
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Get('user/:userId')
   findAllByUser(@Param('userId') userId: string) {
     return this.categoriesService.findAllByUser(+userId);
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Put(':id')
   update(@Param('id') id: string, @Body() dto: UpdateCategoryDto) {
     return this.categoriesService.update(+id, dto);
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Delete(':id')
   delete(@Param('id') id: string) {
     return this.categoriesService.delete(+id);
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Get(':id/posts')
   getPosts(@Param('id') id: string) {
     return this.postsService.getPostsByCategory(+id);

@@ -21,6 +21,7 @@ export class CommunitiesController {
     private readonly postsService: PostsService,
   ) {}
 
+  @UseGuards(JwtCookieAuthGuard)
   @Post()
   create(@Body() dto: CreateCommunityDto) {
     return this.communitiesService.create(dto);
@@ -37,31 +38,37 @@ export class CommunitiesController {
     return this.communitiesService.findAll();
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.communitiesService.findOne(+id);
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Get(':id/user')
   findOneWithUser(@Param('id') id: string) {
     return this.communitiesService.findOneWithUser(+id);
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Get('user/:userId')
   findAllByUser(@Param('userId') userId: string) {
     return this.communitiesService.findAllByUser(+userId);
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Put(':id')
   update(@Param('id') id: string, @Body() dto: UpdateCommunityDto) {
     return this.communitiesService.update(+id, dto);
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Delete(':id')
   delete(@Param('id') id: string) {
     return this.communitiesService.delete(+id);
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Get(':id/posts')
   getPosts(@Param('id') id: string) {
     return this.postsService.getPostsByCommunity(+id);

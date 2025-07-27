@@ -9,15 +9,14 @@ import {
   Put,
   Query,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import { PostsService } from './posts.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import {
-  InsertPostCategory,
-  InsertPostCollection,
-  InsertPostCommunity,
-} from 'src/configuration/db/schema';
-import { RequestWithCookies } from 'src/guards/JwtCookieAuthGuard';
+  JwtCookieAuthGuard,
+  RequestWithCookies,
+} from 'src/guards/JwtCookieAuthGuard';
 import { JwtService } from '@nestjs/jwt';
 
 @Controller('posts')
@@ -26,14 +25,6 @@ export class PostsController {
     private readonly postsService: PostsService,
     private readonly jwtService: JwtService,
   ) {}
-
-  // @Get()
-  // async getPosts(
-  //   @Query('limit') limit: number,
-  //   @Query('offset') offset: number,
-  // ) {
-  //   return this.postsService.getPaginatedPosts(+limit, +offset);
-  // }
 
   @Get('calendar')
   async getPosts(
@@ -134,34 +125,19 @@ export class PostsController {
     return [];
   }
 
-  @Get('filtered')
-  async getPostsByRelation(
-    @Query('categoryId') categoryId?: number,
-    @Query('collectionId') collectionId?: number,
-    @Query('communityId') communityId?: number,
-  ) {
-    if (categoryId) return this.postsService.getPostsByCategory(+categoryId);
-    if (collectionId)
-      return this.postsService.getPostsByCollection(+collectionId);
-    if (communityId) return this.postsService.getPostsByCommunity(+communityId);
-    return [];
-  }
-
+  @UseGuards(JwtCookieAuthGuard)
   @Post()
   async createPost(@Body() dto: CreatePostDto) {
     return this.postsService.createPost(dto);
   }
 
-  @Get(':id')
-  async getPost(@Param('id') id: string) {
-    return this.postsService.getPostById(+id);
-  }
-
+  @UseGuards(JwtCookieAuthGuard)
   @Delete(':id')
   async deletePost(@Param('id') id: string) {
     return this.postsService.deletePost(+id);
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Put(':id')
   async updatePost(
     @Param('id') id: string,
@@ -170,6 +146,7 @@ export class PostsController {
     return this.postsService.updatePost(+id, dto);
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Post(':postId/categories/:categoryId')
   assignCategory(
     @Param('postId') postId: string,
@@ -178,6 +155,7 @@ export class PostsController {
     return this.postsService.assignToCategory(+postId, +categoryId);
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Post(':postId/communities/:communityId')
   assignCommunity(
     @Param('postId') postId: string,
@@ -186,6 +164,7 @@ export class PostsController {
     return this.postsService.assignToCommunity(+postId, +communityId);
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Post(':postId/collections/:collectionId')
   assignCollection(
     @Param('postId') postId: string,
@@ -194,33 +173,7 @@ export class PostsController {
     return this.postsService.assignToCollection(+postId, +collectionId);
   }
 
-  @Put(':postId/categories/:categoryId')
-  async reassignCategory(
-    @Param('postId') postId: string,
-    @Param('categoryId') categoryId: string,
-  ): Promise<InsertPostCategory[]> {
-    await this.postsService.removePostCategoryRelation(+postId);
-    return this.postsService.assignToCategory(+postId, +categoryId);
-  }
-
-  @Put(':postId/collections/:collectionId')
-  async reassignCollection(
-    @Param('postId') postId: string,
-    @Param('collectionId') collectionId: string,
-  ): Promise<InsertPostCollection[]> {
-    await this.postsService.removePostCollectionRelation(+postId);
-    return this.postsService.assignToCollection(+postId, +collectionId);
-  }
-
-  @Put(':postId/communities/:communityId')
-  async reassignCommunity(
-    @Param('postId') postId: string,
-    @Param('communityId') communityId: string,
-  ): Promise<InsertPostCommunity[]> {
-    await this.postsService.removePostCommunityRelation(+postId);
-    return this.postsService.assignToCommunity(+postId, +communityId);
-  }
-
+  @UseGuards(JwtCookieAuthGuard)
   @Delete(':postId/categories/:categoryId')
   async unassignCategory(
     @Param('postId') postId: string,
@@ -229,6 +182,7 @@ export class PostsController {
     await this.postsService.removePostCategoryRelation(+postId);
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Delete(':postId/collections/:collectionId')
   async unassignCollection(
     @Param('postId') postId: string,
@@ -237,6 +191,7 @@ export class PostsController {
     await this.postsService.removePostCollectionRelation(+postId);
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Delete(':postId/communities/:communityId')
   async unassignCommunity(
     @Param('postId') postId: string,

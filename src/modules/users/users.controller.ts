@@ -7,25 +7,25 @@ import {
   Put,
   Delete,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { PostsService } from '../posts/posts.service';
+import { JwtCookieAuthGuard } from 'src/guards/JwtCookieAuthGuard';
 
 @Controller('users')
 export class UsersController {
-  constructor(
-    private readonly usersService: UsersService,
-    private readonly postsService: PostsService,
-  ) {}
+  constructor(private readonly usersService: UsersService) {}
 
+  @UseGuards(JwtCookieAuthGuard)
   @Post()
   create(@Body() dto: CreateUserDto) {
     return this.usersService.create(dto);
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.usersService.findOne(+id);
@@ -44,18 +44,15 @@ export class UsersController {
     return this.usersService.logout(res);
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Put(':id')
   update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
     return this.usersService.update(+id, dto);
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Delete(':id')
   delete(@Param('id') id: string) {
     return this.usersService.delete(+id);
-  }
-
-  @Get(':id/posts')
-  getPosts(@Param('id') id: string) {
-    return this.postsService.getPostsByCommunity(+id);
   }
 }
