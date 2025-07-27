@@ -58,24 +58,30 @@ export class PostsController {
     @Query('communityId') communityId?: number,
     @Query('limit') limit = 10,
     @Query('offset') offset = 0,
+    @Query('includeHiddenSources') includeHiddenSources?: string,
   ) {
+    const showHiddenSources = includeHiddenSources === 'true';
+
     if (categoryId)
       return this.postsService.getPaginatedPostsByCategory(
         +categoryId,
         +limit,
         +offset,
+        showHiddenSources,
       );
     if (collectionId)
       return this.postsService.getPaginatedPostsByCollection(
         +collectionId,
         +limit,
         +offset,
+        showHiddenSources,
       );
     if (communityId)
       return this.postsService.getPaginatedPostsByCommunity(
         +communityId,
         +limit,
         +offset,
+        showHiddenSources,
       );
     return [];
   }
