@@ -6,11 +6,13 @@ import {
   Param,
   Put,
   Delete,
+  UseGuards,
 } from '@nestjs/common';
 import { CollectionsService } from './collections.service';
 import { PostsService } from '../posts/posts.service';
 import { CreateCollectionDto } from './dto/create-collection.dto';
 import { UpdateCollectionDto } from './dto/update-collection.dto';
+import { JwtCookieAuthGuard } from 'src/guards/JwtCookieAuthGuard';
 
 @Controller('collections')
 export class CollectionsController {
@@ -25,12 +27,13 @@ export class CollectionsController {
   }
 
   @Get()
-  findAll() {
+  findAllPublic() {
     return this.collectionsService.findAllPublic();
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Get('all')
-  findAllPublic() {
+  findAll() {
     return this.collectionsService.findAll();
   }
 

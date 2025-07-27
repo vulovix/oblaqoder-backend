@@ -6,11 +6,13 @@ import {
   Param,
   Put,
   Delete,
+  UseGuards,
 } from '@nestjs/common';
 import { CommunitiesService } from './communities.service';
 import { CreateCommunityDto } from './dto/create-community.dto';
 import { UpdateCommunityDto } from './dto/update-community.dto';
 import { PostsService } from '../posts/posts.service';
+import { JwtCookieAuthGuard } from 'src/guards/JwtCookieAuthGuard';
 
 @Controller('communities')
 export class CommunitiesController {
@@ -29,6 +31,7 @@ export class CommunitiesController {
     return this.communitiesService.findAllPublic();
   }
 
+  @UseGuards(JwtCookieAuthGuard)
   @Get('all')
   findAll() {
     return this.communitiesService.findAll();

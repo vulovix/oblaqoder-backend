@@ -8,6 +8,7 @@ import {
   Delete,
   Put,
   Query,
+  Req,
 } from '@nestjs/common';
 import { PostsService } from './posts.service';
 import { CreatePostDto } from './dto/create-post.dto';
@@ -16,10 +17,15 @@ import {
   InsertPostCollection,
   InsertPostCommunity,
 } from 'src/configuration/db/schema';
+import { RequestWithCookies } from 'src/guards/JwtCookieAuthGuard';
+import { JwtService } from '@nestjs/jwt';
 
 @Controller('posts')
 export class PostsController {
-  constructor(private readonly postsService: PostsService) {}
+  constructor(
+    private readonly postsService: PostsService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   // @Get()
   // async getPosts(
@@ -30,19 +36,49 @@ export class PostsController {
   // }
 
   @Get('calendar')
-  async getPosts(@Query('includeHiddenSources') includeHiddenSources?: string) {
-    const showHiddenSources = includeHiddenSources === 'true';
+  async getPosts(
+    @Req() req: RequestWithCookies,
+    @Query('includeHiddenSources') includeHiddenSources?: string,
+  ) {
+    let showHiddenSources = includeHiddenSources === 'true';
+    if (showHiddenSources) {
+      const token = req.cookies?.auth_token;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const user = token ? await this.jwtService.verifyAsync(token) : null;
+        if (!user) {
+          showHiddenSources = false; // fallback to false silently
+        }
+      } catch {
+        showHiddenSources = false; // invalid token → fallback silently
+      }
+    }
     return this.postsService.getCalendarPosts(showHiddenSources);
   }
 
   @Get('wall/paginated')
   async getPaginatedPostsByDate(
+    @Req() req: RequestWithCookies,
     @Query('limit') limit: number,
     @Query('offset') offset: number,
     @Query('date') date?: string, // Optional, e.g. "2025-09-08"
     @Query('includeHiddenSources') includeHiddenSources?: string,
   ) {
-    const showHiddenSources = includeHiddenSources === 'true';
+    let showHiddenSources = includeHiddenSources === 'true';
+
+    if (showHiddenSources) {
+      const token = req.cookies?.auth_token;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const user = token ? await this.jwtService.verifyAsync(token) : null;
+        if (!user) {
+          showHiddenSources = false; // fallback to false silently
+        }
+      } catch {
+        showHiddenSources = false; // invalid token → fallback silently
+      }
+    }
+
     return this.postsService.getPaginatedPostsByDate(
       +limit,
       +offset,
@@ -53,6 +89,7 @@ export class PostsController {
 
   @Get('filtered/paginated')
   async getPaginatedPostsByRelation(
+    @Req() req: RequestWithCookies,
     @Query('categoryId') categoryId?: number,
     @Query('collectionId') collectionId?: number,
     @Query('communityId') communityId?: number,
@@ -60,8 +97,19 @@ export class PostsController {
     @Query('offset') offset = 0,
     @Query('includeHiddenSources') includeHiddenSources?: string,
   ) {
-    const showHiddenSources = includeHiddenSources === 'true';
-
+    let showHiddenSources = includeHiddenSources === 'true';
+    if (showHiddenSources) {
+      const token = req.cookies?.auth_token;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const user = token ? await this.jwtService.verifyAsync(token) : null;
+        if (!user) {
+          showHiddenSources = false; // fallback to false silently
+        }
+      } catch {
+        showHiddenSources = false; // invalid token → fallback silently
+      }
+    }
     if (categoryId)
       return this.postsService.getPaginatedPostsByCategory(
         +categoryId,

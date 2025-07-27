@@ -6,7 +6,9 @@ import {
   Param,
   Put,
   Delete,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -30,8 +32,16 @@ export class UsersController {
   }
 
   @Post('/email')
-  findOneByEmail(@Body('email') email: string) {
-    return this.usersService.findOneByEmail(email);
+  findOneByEmail(
+    @Body('email') email: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.usersService.findOneByEmail(email, res);
+  }
+
+  @Post('/logout')
+  logout(@Res({ passthrough: true }) res: Response) {
+    return this.usersService.logout(res);
   }
 
   @Put(':id')

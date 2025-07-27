@@ -7,6 +7,7 @@ import { CollectionsModule } from './modules/collections/collections.module';
 import { CommunitiesModule } from './modules/communities/communities.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { UsersModule } from './modules/users/users.module';
+import { JwtModule } from '@nestjs/jwt';
 
 @Module({
   imports: [
@@ -16,6 +17,13 @@ import { UsersModule } from './modules/users/users.module';
     CollectionsModule,
     CommunitiesModule,
     CategoriesModule,
+    JwtModule.registerAsync({
+      global: true,
+      useFactory: () => ({
+        secret: process.env.JWT_SECRET,
+        signOptions: { expiresIn: '7d' },
+      }),
+    }),
   ],
   controllers: [AppController],
   providers: [AppService],
