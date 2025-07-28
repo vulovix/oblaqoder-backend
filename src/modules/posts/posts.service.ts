@@ -6,9 +6,12 @@ import {
   InsertPostCollection,
   InsertPostCommunity,
   postsTable,
+  topicCategoriesTable,
+  topicCollectionsTable,
+  topicCommunitiesTable,
 } from '../../configuration/db/schema';
 import { CreatePostDto } from './dto/create-post.dto';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { InsertPost } from '../../configuration/db/schema';
 import { SupabaseStorageService } from 'src/services/SupabaseStorage.service';
 import {
@@ -697,6 +700,122 @@ export class PostsService {
   //     })),
   //   );
   // }
+
+  async getPaginatedPostsByTopic(
+    topicId: number,
+    limit: number,
+    offset: number,
+    includeHiddenSources = false,
+  ) {
+    // Korak 1: Skupi sve postId-eve preko svih relacija
+    const categoryPostIds = await db
+      .select({ postId: postCategoriesTable.postId })
+      .from(postCategoriesTable)
+      .innerJoin(
+        topicCategoriesTable,
+        and(
+          eq(topicCategoriesTable.categoryId, postCategoriesTable.categoryId),
+          eq(topicCategoriesTable.topicId, topicId),
+        ),
+      );
+
+    const collectionPostIds = await db
+      .select({ postId: postCollectionsTable.postId })
+      .from(postCollectionsTable)
+      .innerJoin(
+        topicCollectionsTable,
+        and(
+          eq(
+            topicCollectionsTable.collectionId,
+            postCollectionsTable.collectionId,
+          ),
+          eq(topicCollectionsTable.topicId, topicId),
+        ),
+      );
+
+    const communityPostIds = await db
+      .select({ postId: postCommunitiesTable.postId })
+      .from(postCommunitiesTable)
+      .innerJoin(
+        topicCommunitiesTable,
+        and(
+          eq(
+            topicCommunitiesTable.communityId,
+            postCommunitiesTable.communityId,
+          ),
+          eq(topicCommunitiesTable.topicId, topicId),
+        ),
+      );
+
+    const allPostIds = [
+      ...categoryPostIds,
+      ...collectionPostIds,
+      ...communityPostIds,
+    ].map((r) => r.postId);
+
+    const uniqueIds = [...new Set(allPostIds)];
+    if (uniqueIds.length === 0) return [];
+
+    // Korak 2: Pokupi sve postove koji odgovaraju
+    const posts = await db.query.postsTable.findMany({
+      where: (post, { inArray }) => inArray(post.id, uniqueIds),
+      with: {
+        files: true,
+        user: {
+          columns: {
+            id: true,
+            name: true,
+          },
+        },
+        categories: { with: { category: true } },
+        collections: { with: { collection: true } },
+        communities: { with: { community: true } },
+      },
+      orderBy: (post, { desc }) => [desc(post.createdAt)],
+    });
+
+    // Korak 3: Filtriraj po vidljivosti
+    const filtered = includeHiddenSources
+      ? posts
+      : posts.filter((post) => {
+          if (!post.isPublic) return false;
+          const hasHiddenCategory = post.categories.some(
+            (c) => c.category?.isPublic === false,
+          );
+          const hasHiddenCollection = post.collections.some(
+            (c) => c.collection?.isPublic === false,
+          );
+          const hasHiddenCommunity = post.communities.some(
+            (c) => c.community?.isPublic === false,
+          );
+          return (
+            !hasHiddenCategory && !hasHiddenCollection && !hasHiddenCommunity
+          );
+        });
+
+    // Korak 4: Paginacija
+    const paginated = filtered.slice(offset, offset + limit);
+
+    // Korak 5: Potpisani URL-ovi
+    return Promise.all(
+      paginated.map(async (post) => ({
+        ...post,
+        files: await Promise.all(
+          post.files.map(async (file) => ({
+            ...file,
+            publicUrl: await this.storage.getSignedUrl(
+              file.bucket,
+              file.filePath,
+            ),
+          })),
+        ),
+        categories: post.categories.map((pc) => pc.category),
+        collections: post.collections.map((pc) => pc.collection),
+        communities: post.communities.map((pc) => pc.community),
+      })),
+    );
+  }
+
   async getPaginatedPostsByCategory(
     categoryId: number,
     limit: number,

@@ -84,6 +84,7 @@ export class PostsController {
     @Query('categoryId') categoryId?: number,
     @Query('collectionId') collectionId?: number,
     @Query('communityId') communityId?: number,
+    @Query('topicId') topicId?: number,
     @Query('limit') limit = 10,
     @Query('offset') offset = 0,
     @Query('includeHiddenSources') includeHiddenSources?: string,
@@ -101,6 +102,15 @@ export class PostsController {
         showHiddenSources = false; // invalid token → fallback silently
       }
     }
+    if (topicId) {
+      return this.postsService.getPaginatedPostsByTopic(
+        +topicId,
+        +limit,
+        +offset,
+        showHiddenSources,
+      );
+    }
+
     if (categoryId)
       return this.postsService.getPaginatedPostsByCategory(
         +categoryId,

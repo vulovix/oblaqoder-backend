@@ -191,6 +191,93 @@ export const postCategoriesRelations = relations(
   }),
 );
 
+// --- TOPICS ---
+export const topicsTable = pgTable('topics_table', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull().unique(),
+  slug: text('slug').notNull().unique(),
+  isPublic: boolean('is_public').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at')
+    .notNull()
+    .$onUpdate(() => new Date()),
+});
+
+export const topicsRelations = relations(topicsTable, ({ many }) => ({
+  collections: many(topicCollectionsTable),
+  categories: many(topicCategoriesTable),
+  communities: many(topicCommunitiesTable),
+}));
+
+export const topicCollectionsTable = pgTable('topic_collections_table', {
+  topicId: integer('topic_id')
+    .notNull()
+    .references(() => topicsTable.id, { onDelete: 'cascade' }),
+  collectionId: integer('collection_id')
+    .notNull()
+    .references(() => collectionsTable.id, { onDelete: 'cascade' }),
+});
+
+export const topicCollectionsRelations = relations(
+  topicCollectionsTable,
+  ({ one }) => ({
+    topic: one(topicsTable, {
+      fields: [topicCollectionsTable.topicId],
+      references: [topicsTable.id],
+    }),
+    collection: one(collectionsTable, {
+      fields: [topicCollectionsTable.collectionId],
+      references: [collectionsTable.id],
+    }),
+  }),
+);
+
+export const topicCategoriesTable = pgTable('topic_categories_table', {
+  topicId: integer('topic_id')
+    .notNull()
+    .references(() => topicsTable.id, { onDelete: 'cascade' }),
+  categoryId: integer('category_id')
+    .notNull()
+    .references(() => categoriesTable.id, { onDelete: 'cascade' }),
+});
+
+export const topicCategoriesRelations = relations(
+  topicCategoriesTable,
+  ({ one }) => ({
+    topic: one(topicsTable, {
+      fields: [topicCategoriesTable.topicId],
+      references: [topicsTable.id],
+    }),
+    category: one(categoriesTable, {
+      fields: [topicCategoriesTable.categoryId],
+      references: [categoriesTable.id],
+    }),
+  }),
+);
+
+export const topicCommunitiesTable = pgTable('topic_communities_table', {
+  topicId: integer('topic_id')
+    .notNull()
+    .references(() => topicsTable.id, { onDelete: 'cascade' }),
+  communityId: integer('community_id')
+    .notNull()
+    .references(() => communitiesTable.id, { onDelete: 'cascade' }),
+});
+
+export const topicCommunitiesRelations = relations(
+  topicCommunitiesTable,
+  ({ one }) => ({
+    topic: one(topicsTable, {
+      fields: [topicCommunitiesTable.topicId],
+      references: [topicsTable.id],
+    }),
+    community: one(communitiesTable, {
+      fields: [topicCommunitiesTable.communityId],
+      references: [communitiesTable.id],
+    }),
+  }),
+);
+
 // --- TYPES ---
 export type InsertUser = typeof usersTable.$inferInsert;
 export type SelectUser = typeof usersTable.$inferSelect;
@@ -213,3 +300,10 @@ export type SelectCategory = typeof categoriesTable.$inferSelect;
 export type InsertPostCategory = typeof postCategoriesTable.$inferInsert;
 export type InsertPostCollection = typeof postCollectionsTable.$inferInsert;
 export type InsertPostCommunity = typeof postCommunitiesTable.$inferInsert;
+
+export type InsertTopic = typeof topicsTable.$inferInsert;
+export type SelectTopic = typeof topicsTable.$inferSelect;
+
+export type InsertTopicCollection = typeof topicCollectionsTable.$inferInsert;
+export type InsertTopicCategory = typeof topicCategoriesTable.$inferInsert;
+export type InsertTopicCommunity = typeof topicCommunitiesTable.$inferInsert;

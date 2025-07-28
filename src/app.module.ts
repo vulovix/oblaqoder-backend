@@ -8,11 +8,13 @@ import { CommunitiesModule } from './modules/communities/communities.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { UsersModule } from './modules/users/users.module';
 import { JwtModule } from '@nestjs/jwt';
+import { TopicsModule } from './modules/topics/topics.module';
 
 @Module({
   imports: [
     UsersModule,
     PostsModule,
+    TopicsModule,
     PostFilesModule,
     CollectionsModule,
     CommunitiesModule,
