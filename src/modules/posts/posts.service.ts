@@ -2,6 +2,9 @@
 import { Injectable } from '@nestjs/common';
 import { db } from '../../configuration/db';
 import {
+  categoriesTable,
+  collectionsTable,
+  communitiesTable,
   InsertPostCategory,
   InsertPostCollection,
   InsertPostCommunity,
@@ -11,7 +14,7 @@ import {
   topicCommunitiesTable,
 } from '../../configuration/db/schema';
 import { CreatePostDto } from './dto/create-post.dto';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq, exists, gte, inArray, lt, not } from 'drizzle-orm';
 import { InsertPost } from '../../configuration/db/schema';
 import { SupabaseStorageService } from 'src/services/SupabaseStorage.service';
 import {
@@ -219,7 +222,7 @@ export class PostsService {
     );
   }
 
-  // async getPaginatedPostsByDate(
+  // async getPaginatedPostsByDateOld(
   //   limit: number,
   //   offset: number,
   //   date?: string,
@@ -305,6 +308,136 @@ export class PostsService {
   // }
 
   async getPaginatedPostsByDate(
+    limit: number,
+    offset: number,
+    date?: string,
+    includeHiddenSources: boolean = false,
+  ) {
+    // Step 1: Get only the IDs of visible posts (filtered + paginated in DB)
+    const baseConditions: any[] = [];
+
+    if (date) {
+      baseConditions.push(
+        gte(postsTable.createdAt, new Date(`${date}T00:00:00.000Z`)),
+        lt(postsTable.createdAt, new Date(`${date}T23:59:59.999Z`)),
+      );
+    }
+
+    if (!includeHiddenSources) {
+      baseConditions.push(eq(postsTable.isPublic, true));
+
+      baseConditions.push(
+        not(
+          exists(
+            db
+              .select()
+              .from(postCategoriesTable)
+              .innerJoin(
+                categoriesTable,
+                eq(postCategoriesTable.categoryId, categoriesTable.id),
+              )
+              .where(
+                and(
+                  eq(postCategoriesTable.postId, postsTable.id),
+                  eq(categoriesTable.isPublic, false),
+                ),
+              ),
+          ),
+        ),
+        not(
+          exists(
+            db
+              .select()
+              .from(postCollectionsTable)
+              .innerJoin(
+                collectionsTable,
+                eq(postCollectionsTable.collectionId, collectionsTable.id),
+              )
+              .where(
+                and(
+                  eq(postCollectionsTable.postId, postsTable.id),
+                  eq(collectionsTable.isPublic, false),
+                ),
+              ),
+          ),
+        ),
+        not(
+          exists(
+            db
+              .select()
+              .from(postCommunitiesTable)
+              .innerJoin(
+                communitiesTable,
+                eq(postCommunitiesTable.communityId, communitiesTable.id),
+              )
+              .where(
+                and(
+                  eq(postCommunitiesTable.postId, postsTable.id),
+                  eq(communitiesTable.isPublic, false),
+                ),
+              ),
+          ),
+        ),
+      );
+    }
+
+    const postIdsResult = await db
+      .select({ id: postsTable.id })
+      .from(postsTable)
+      .where(and(...baseConditions))
+      .orderBy(desc(postsTable.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    const postIds = postIdsResult.map((row) => row.id);
+
+    if (postIds.length === 0) return [];
+
+    // Step 2: Load the full posts with relations
+    const posts = await db.query.postsTable.findMany({
+      where: (post, { inArray }) => inArray(post.id, postIds),
+      with: {
+        files: true,
+        user: {
+          columns: {
+            id: true,
+            name: true,
+          },
+        },
+        categories: {
+          with: { category: true },
+        },
+        collections: {
+          with: { collection: true },
+        },
+        communities: {
+          with: { community: true },
+        },
+      },
+      orderBy: (post, { desc }) => [desc(post.createdAt)],
+    });
+
+    // Step 3: Map signed URLs and flatten nested relations
+    return Promise.all(
+      posts.map(async (post) => ({
+        ...post,
+        files: await Promise.all(
+          post.files.map(async (file) => ({
+            ...file,
+            publicUrl: await this.storage.getSignedUrl(
+              file.bucket,
+              file.filePath,
+            ),
+          })),
+        ),
+        categories: post.categories.map((c) => c.category),
+        collections: post.collections.map((c) => c.collection),
+        communities: post.communities.map((c) => c.community),
+      })),
+    );
+  }
+
+  async getPaginatedPostsByDateOld(
     limit: number,
     offset: number,
     date?: string,
@@ -516,192 +649,8 @@ export class PostsService {
       })),
     );
   }
-  // async getPaginatedPostsByCategory(
-  //   categoryId: number,
-  //   limit: number,
-  //   offset: number,
-  // ) {
-  //   const postIds = await db
-  //     .select({ postId: postCategoriesTable.postId })
-  //     .from(postCategoriesTable)
-  //     .where(eq(postCategoriesTable.categoryId, categoryId));
 
-  //   const ids = postIds.map((r) => r.postId);
-  //   const posts = await db.query.postsTable.findMany({
-  //     where: (post, { inArray }) => inArray(post.id, ids),
-  //     with: {
-  //       files: true,
-  //       user: {
-  //         columns: {
-  //           id: true,
-  //           name: true,
-  //         },
-  //       },
-  //     },
-  //     limit,
-  //     offset,
-  //     orderBy: (posts, { desc }) => [desc(posts.createdAt)],
-  //   });
-
-  //   return Promise.all(
-  //     posts.map(async (post) => ({
-  //       ...post,
-  //       files: await Promise.all(
-  //         post.files.map(async (file) => ({
-  //           ...file,
-  //           publicUrl: await this.storage.getSignedUrl(
-  //             file.bucket,
-  //             file.filePath,
-  //           ),
-  //         })),
-  //       ),
-  //     })),
-  //   );
-  // }
-
-  // async getPaginatedPostsByCollection(
-  //   collectionId: number,
-  //   limit: number,
-  //   offset: number,
-  // ) {
-  //   const postIds = await db
-  //     .select({ postId: postCollectionsTable.postId })
-  //     .from(postCollectionsTable)
-  //     .where(eq(postCollectionsTable.collectionId, collectionId));
-
-  //   const ids = postIds.map((r) => r.postId);
-  //   const posts = await db.query.postsTable.findMany({
-  //     where: (post, { inArray }) => inArray(post.id, ids),
-  //     with: {
-  //       files: true,
-  //       user: {
-  //         columns: {
-  //           id: true,
-  //           name: true,
-  //         },
-  //       },
-  //     },
-  //     limit,
-  //     offset,
-  //     orderBy: (posts, { desc }) => [desc(posts.createdAt)],
-  //   });
-
-  //   return Promise.all(
-  //     posts.map(async (post) => ({
-  //       ...post,
-  //       files: await Promise.all(
-  //         post.files.map(async (file) => ({
-  //           ...file,
-  //           publicUrl: await this.storage.getSignedUrl(
-  //             file.bucket,
-  //             file.filePath,
-  //           ),
-  //         })),
-  //       ),
-  //     })),
-  //   );
-  // }
-
-  // async getPaginatedPostsByCommunity(
-  //   communityId: number,
-  //   limit: number,
-  //   offset: number,
-  // ) {
-  //   const postIds = await db
-  //     .select({ postId: postCommunitiesTable.postId })
-  //     .from(postCommunitiesTable)
-  //     .where(eq(postCommunitiesTable.communityId, communityId));
-
-  //   const ids = postIds.map((r) => r.postId);
-  //   const posts = await db.query.postsTable.findMany({
-  //     where: (post, { inArray }) => inArray(post.id, ids),
-  //     with: {
-  //       files: true,
-  //       user: {
-  //         columns: {
-  //           id: true,
-  //           name: true,
-  //         },
-  //       },
-  //     },
-  //     limit,
-  //     offset,
-  //     orderBy: (posts, { desc }) => [desc(posts.createdAt)],
-  //   });
-
-  //   return Promise.all(
-  //     posts.map(async (post) => ({
-  //       ...post,
-  //       files: await Promise.all(
-  //         post.files.map(async (file) => ({
-  //           ...file,
-  //           publicUrl: await this.storage.getSignedUrl(
-  //             file.bucket,
-  //             file.filePath,
-  //           ),
-  //         })),
-  //       ),
-  //     })),
-  //   );
-  // }
-
-  // async getPaginatedPostsByCategory(
-  //   categoryId: number,
-  //   limit: number,
-  //   offset: number,
-  // ) {
-  //   const postIds = await db
-  //     .select({ postId: postCategoriesTable.postId })
-  //     .from(postCategoriesTable)
-  //     .where(eq(postCategoriesTable.categoryId, categoryId));
-
-  //   const ids = postIds.map((r) => r.postId);
-
-  //   const posts = await db.query.postsTable.findMany({
-  //     where: (post, { inArray }) => inArray(post.id, ids),
-  //     with: {
-  //       files: true,
-  //       user: {
-  //         columns: {
-  //           id: true,
-  //           name: true,
-  //         },
-  //       },
-  //       categories: {
-  //         with: { category: true },
-  //       },
-  //       collections: {
-  //         with: { collection: true },
-  //       },
-  //       communities: {
-  //         with: { community: true },
-  //       },
-  //     },
-  //     limit,
-  //     offset,
-  //     orderBy: (posts, { desc }) => [desc(posts.createdAt)],
-  //   });
-
-  //   return Promise.all(
-  //     posts.map(async (post) => ({
-  //       ...post,
-  //       files: await Promise.all(
-  //         post.files.map(async (file) => ({
-  //           ...file,
-  //           publicUrl: await this.storage.getSignedUrl(
-  //             file.bucket,
-  //             file.filePath,
-  //           ),
-  //         })),
-  //       ),
-  //       categories: post.categories.map((pc) => pc.category),
-  //       collections: post.collections.map((pc) => pc.collection),
-  //       communities: post.communities.map((pc) => pc.community),
-  //     })),
-  //   );
-  // }
-
-  async getPaginatedPostsByTopic(
+  async getPaginatedPostsByTopicOld(
     topicId: number,
     limit: number,
     offset: number,
@@ -816,23 +765,132 @@ export class PostsService {
     );
   }
 
-  async getPaginatedPostsByCategory(
-    categoryId: number,
+  async getPaginatedPostsByTopic(
+    topicId: number,
     limit: number,
     offset: number,
-    includeHiddenSources: boolean = false,
+    includeHiddenSources = false,
   ) {
-    // Step 1: Get post IDs for this category
-    const postIds = await db
+    // Korak 1: Pronađi sve postId-eve vezane za topic
+    const categoryPostIds = await db
       .select({ postId: postCategoriesTable.postId })
       .from(postCategoriesTable)
-      .where(eq(postCategoriesTable.categoryId, categoryId));
+      .innerJoin(
+        topicCategoriesTable,
+        and(
+          eq(topicCategoriesTable.categoryId, postCategoriesTable.categoryId),
+          eq(topicCategoriesTable.topicId, topicId),
+        ),
+      );
 
-    const ids = postIds.map((r) => r.postId);
+    const collectionPostIds = await db
+      .select({ postId: postCollectionsTable.postId })
+      .from(postCollectionsTable)
+      .innerJoin(
+        topicCollectionsTable,
+        and(
+          eq(
+            topicCollectionsTable.collectionId,
+            postCollectionsTable.collectionId,
+          ),
+          eq(topicCollectionsTable.topicId, topicId),
+        ),
+      );
 
+    const communityPostIds = await db
+      .select({ postId: postCommunitiesTable.postId })
+      .from(postCommunitiesTable)
+      .innerJoin(
+        topicCommunitiesTable,
+        and(
+          eq(
+            topicCommunitiesTable.communityId,
+            postCommunitiesTable.communityId,
+          ),
+          eq(topicCommunitiesTable.topicId, topicId),
+        ),
+      );
+
+    // Korak 2: Spoji i očisti ID-jeve
+    const allPostIds = [
+      ...categoryPostIds,
+      ...collectionPostIds,
+      ...communityPostIds,
+    ].map((r) => r.postId);
+
+    const uniqueIds = [...new Set(allPostIds)];
+    if (uniqueIds.length === 0) return [];
+
+    // Korak 3: SQL filtrirani upit sa LIMIT i OFFSET
+    const visibilityFilters = !includeHiddenSources
+      ? [
+          eq(postsTable.isPublic, true),
+          not(
+            exists(
+              db
+                .select()
+                .from(postCategoriesTable)
+                .innerJoin(
+                  categoriesTable,
+                  eq(postCategoriesTable.categoryId, categoriesTable.id),
+                )
+                .where(
+                  and(
+                    eq(postCategoriesTable.postId, postsTable.id),
+                    eq(categoriesTable.isPublic, false),
+                  ),
+                ),
+            ),
+          ),
+          not(
+            exists(
+              db
+                .select()
+                .from(postCollectionsTable)
+                .innerJoin(
+                  collectionsTable,
+                  eq(postCollectionsTable.collectionId, collectionsTable.id),
+                )
+                .where(
+                  and(
+                    eq(postCollectionsTable.postId, postsTable.id),
+                    eq(collectionsTable.isPublic, false),
+                  ),
+                ),
+            ),
+          ),
+          not(
+            exists(
+              db
+                .select()
+                .from(postCommunitiesTable)
+                .innerJoin(
+                  communitiesTable,
+                  eq(postCommunitiesTable.communityId, communitiesTable.id),
+                )
+                .where(
+                  and(
+                    eq(postCommunitiesTable.postId, postsTable.id),
+                    eq(communitiesTable.isPublic, false),
+                  ),
+                ),
+            ),
+          ),
+        ]
+      : [];
+
+    const paginatedPostIds = await db
+      .select({ id: postsTable.id })
+      .from(postsTable)
+      .where(and(inArray(postsTable.id, uniqueIds), ...visibilityFilters))
+      .orderBy(desc(postsTable.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    const ids = paginatedPostIds.map((r) => r.id);
     if (ids.length === 0) return [];
 
-    // Step 2: Fetch all posts by those IDs (overfetch instead of limit)
+    // Korak 4: Povučeš sve postove za te ID-jeve
     const posts = await db.query.postsTable.findMany({
       where: (post, { inArray }) => inArray(post.id, ids),
       with: {
@@ -843,46 +901,16 @@ export class PostsService {
             name: true,
           },
         },
-        categories: {
-          with: { category: true },
-        },
-        collections: {
-          with: { collection: true },
-        },
-        communities: {
-          with: { community: true },
-        },
+        categories: { with: { category: true } },
+        collections: { with: { collection: true } },
+        communities: { with: { community: true } },
       },
-      orderBy: (posts, { desc }) => [desc(posts.createdAt)],
+      orderBy: (post, { desc }) => [desc(post.createdAt)],
     });
 
-    // Step 3: Filter visibility
-    const filtered = includeHiddenSources
-      ? posts
-      : posts.filter((post) => {
-          if (post.isPublic === false) return false;
-
-          const hasHiddenCategory = post.categories.some(
-            (c) => c.category?.isPublic === false,
-          );
-          const hasHiddenCollection = post.collections.some(
-            (c) => c.collection?.isPublic === false,
-          );
-          const hasHiddenCommunity = post.communities.some(
-            (c) => c.community?.isPublic === false,
-          );
-
-          return (
-            !hasHiddenCategory && !hasHiddenCollection && !hasHiddenCommunity
-          );
-        });
-
-    // Step 4: Slice after filtering for pagination
-    const paginated = filtered.slice(offset, offset + limit);
-
-    // Step 5: Transform post structure
+    // Korak 5: Dodaj signed URL-ove
     return Promise.all(
-      paginated.map(async (post) => ({
+      posts.map(async (post) => ({
         ...post,
         files: await Promise.all(
           post.files.map(async (file) => ({
@@ -900,18 +928,23 @@ export class PostsService {
     );
   }
 
-  // async getPaginatedPostsByCollection(
-  //   collectionId: number,
+  // async getPaginatedPostsByCategoryOld(
+  //   categoryId: number,
   //   limit: number,
   //   offset: number,
+  //   includeHiddenSources: boolean = false,
   // ) {
+  //   // Step 1: Get post IDs for this category
   //   const postIds = await db
-  //     .select({ postId: postCollectionsTable.postId })
-  //     .from(postCollectionsTable)
-  //     .where(eq(postCollectionsTable.collectionId, collectionId));
+  //     .select({ postId: postCategoriesTable.postId })
+  //     .from(postCategoriesTable)
+  //     .where(eq(postCategoriesTable.categoryId, categoryId));
 
   //   const ids = postIds.map((r) => r.postId);
 
+  //   if (ids.length === 0) return [];
+
+  //   // Step 2: Fetch all posts by those IDs (overfetch instead of limit)
   //   const posts = await db.query.postsTable.findMany({
   //     where: (post, { inArray }) => inArray(post.id, ids),
   //     with: {
@@ -932,13 +965,244 @@ export class PostsService {
   //         with: { community: true },
   //       },
   //     },
-  //     limit,
-  //     offset,
   //     orderBy: (posts, { desc }) => [desc(posts.createdAt)],
   //   });
 
+  //   // Step 3: Filter visibility
+  //   const filtered = includeHiddenSources
+  //     ? posts
+  //     : posts.filter((post) => {
+  //         if (post.isPublic === false) return false;
+
+  //         const hasHiddenCategory = post.categories.some(
+  //           (c) => c.category?.isPublic === false,
+  //         );
+  //         const hasHiddenCollection = post.collections.some(
+  //           (c) => c.collection?.isPublic === false,
+  //         );
+  //         const hasHiddenCommunity = post.communities.some(
+  //           (c) => c.community?.isPublic === false,
+  //         );
+
+  //         return (
+  //           !hasHiddenCategory && !hasHiddenCollection && !hasHiddenCommunity
+  //         );
+  //       });
+
+  //   // Step 4: Slice after filtering for pagination
+  //   const paginated = filtered.slice(offset, offset + limit);
+
+  //   // Step 5: Transform post structure
   //   return Promise.all(
-  //     posts.map(async (post) => ({
+  //     paginated.map(async (post) => ({
+  //       ...post,
+  //       files: await Promise.all(
+  //         post.files.map(async (file) => ({
+  //           ...file,
+  //           publicUrl: await this.storage.getSignedUrl(
+  //             file.bucket,
+  //             file.filePath,
+  //           ),
+  //         })),
+  //       ),
+  //       categories: post.categories.map((pc) => pc.category),
+  //       collections: post.collections.map((pc) => pc.collection),
+  //       communities: post.communities.map((pc) => pc.community),
+  //     })),
+  //   );
+  // }
+
+  async getPaginatedPostsByCategory(
+    categoryId: number,
+    limit: number,
+    offset: number,
+    includeHiddenSources: boolean = false,
+  ) {
+    const baseConditions: any[] = [
+      eq(postCategoriesTable.categoryId, categoryId),
+    ];
+
+    if (!includeHiddenSources) {
+      baseConditions.push(
+        eq(postsTable.isPublic, true),
+        not(
+          exists(
+            db
+              .select()
+              .from(postCategoriesTable)
+              .innerJoin(
+                categoriesTable,
+                eq(postCategoriesTable.categoryId, categoriesTable.id),
+              )
+              .where(
+                and(
+                  eq(postCategoriesTable.postId, postsTable.id),
+                  eq(categoriesTable.isPublic, false),
+                ),
+              ),
+          ),
+        ),
+        not(
+          exists(
+            db
+              .select()
+              .from(postCollectionsTable)
+              .innerJoin(
+                collectionsTable,
+                eq(postCollectionsTable.collectionId, collectionsTable.id),
+              )
+              .where(
+                and(
+                  eq(postCollectionsTable.postId, postsTable.id),
+                  eq(collectionsTable.isPublic, false),
+                ),
+              ),
+          ),
+        ),
+        not(
+          exists(
+            db
+              .select()
+              .from(postCommunitiesTable)
+              .innerJoin(
+                communitiesTable,
+                eq(postCommunitiesTable.communityId, communitiesTable.id),
+              )
+              .where(
+                and(
+                  eq(postCommunitiesTable.postId, postsTable.id),
+                  eq(communitiesTable.isPublic, false),
+                ),
+              ),
+          ),
+        ),
+      );
+    }
+
+    // Step 1: Find post IDs related to the category and apply visibility filter
+    const postIdsResult = await db
+      .select({ id: postCategoriesTable.postId })
+      .from(postCategoriesTable)
+      .innerJoin(postsTable, eq(postCategoriesTable.postId, postsTable.id))
+      .where(and(...baseConditions))
+      .orderBy(desc(postsTable.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    const ids = postIdsResult.map((r) => r.id);
+    if (ids.length === 0) return [];
+
+    // Step 2: Fetch full posts
+    const posts = await db.query.postsTable.findMany({
+      where: (post, { inArray }) => inArray(post.id, ids),
+      with: {
+        files: true,
+        user: {
+          columns: {
+            id: true,
+            name: true,
+          },
+        },
+        categories: {
+          with: { category: true },
+        },
+        collections: {
+          with: { collection: true },
+        },
+        communities: {
+          with: { community: true },
+        },
+      },
+      orderBy: (post, { desc }) => [desc(post.createdAt)],
+    });
+
+    // Step 3: Signed file URLs and flatten
+    return Promise.all(
+      posts.map(async (post) => ({
+        ...post,
+        files: await Promise.all(
+          post.files.map(async (file) => ({
+            ...file,
+            publicUrl: await this.storage.getSignedUrl(
+              file.bucket,
+              file.filePath,
+            ),
+          })),
+        ),
+        categories: post.categories.map((pc) => pc.category),
+        collections: post.collections.map((pc) => pc.collection),
+        communities: post.communities.map((pc) => pc.community),
+      })),
+    );
+  }
+
+  // async getPaginatedPostsByCollectionOld(
+  //   collectionId: number,
+  //   limit: number,
+  //   offset: number,
+  //   includeHiddenSources: boolean = false,
+  // ) {
+  //   // Step 1: Get post IDs for this collection
+  //   const postIds = await db
+  //     .select({ postId: postCollectionsTable.postId })
+  //     .from(postCollectionsTable)
+  //     .where(eq(postCollectionsTable.collectionId, collectionId));
+
+  //   const ids = postIds.map((r) => r.postId);
+
+  //   if (ids.length === 0) return [];
+
+  //   // Step 2: Fetch full post data without limit (we paginate after filtering)
+  //   const posts = await db.query.postsTable.findMany({
+  //     where: (post, { inArray }) => inArray(post.id, ids),
+  //     with: {
+  //       files: true,
+  //       user: {
+  //         columns: {
+  //           id: true,
+  //           name: true,
+  //         },
+  //       },
+  //       categories: {
+  //         with: { category: true },
+  //       },
+  //       collections: {
+  //         with: { collection: true },
+  //       },
+  //       communities: {
+  //         with: { community: true },
+  //       },
+  //     },
+  //     orderBy: (posts, { desc }) => [desc(posts.createdAt)],
+  //   });
+
+  //   // Step 3: Filter hidden sources if necessary
+  //   const filtered = includeHiddenSources
+  //     ? posts
+  //     : posts.filter((post) => {
+  //         if (post.isPublic === false) return false;
+
+  //         const hasHiddenCategory = post.categories.some(
+  //           (c) => c.category?.isPublic === false,
+  //         );
+  //         const hasHiddenCollection = post.collections.some(
+  //           (c) => c.collection?.isPublic === false,
+  //         );
+  //         const hasHiddenCommunity = post.communities.some(
+  //           (c) => c.community?.isPublic === false,
+  //         );
+
+  //         return (
+  //           !hasHiddenCategory && !hasHiddenCollection && !hasHiddenCommunity
+  //         );
+  //       });
+
+  //   // Step 4: Apply offset and limit after filtering
+  //   const paginated = filtered.slice(offset, offset + limit);
+
+  //   // Step 5: Map + sign files
+  //   return Promise.all(
+  //     paginated.map(async (post) => ({
   //       ...post,
   //       files: await Promise.all(
   //         post.files.map(async (file) => ({
@@ -962,17 +1226,81 @@ export class PostsService {
     offset: number,
     includeHiddenSources: boolean = false,
   ) {
-    // Step 1: Get post IDs for this collection
-    const postIds = await db
-      .select({ postId: postCollectionsTable.postId })
+    const baseConditions: any[] = [
+      eq(postCollectionsTable.collectionId, collectionId),
+    ];
+
+    if (!includeHiddenSources) {
+      baseConditions.push(
+        eq(postsTable.isPublic, true),
+        not(
+          exists(
+            db
+              .select()
+              .from(postCategoriesTable)
+              .innerJoin(
+                categoriesTable,
+                eq(postCategoriesTable.categoryId, categoriesTable.id),
+              )
+              .where(
+                and(
+                  eq(postCategoriesTable.postId, postsTable.id),
+                  eq(categoriesTable.isPublic, false),
+                ),
+              ),
+          ),
+        ),
+        not(
+          exists(
+            db
+              .select()
+              .from(postCollectionsTable)
+              .innerJoin(
+                collectionsTable,
+                eq(postCollectionsTable.collectionId, collectionsTable.id),
+              )
+              .where(
+                and(
+                  eq(postCollectionsTable.postId, postsTable.id),
+                  eq(collectionsTable.isPublic, false),
+                ),
+              ),
+          ),
+        ),
+        not(
+          exists(
+            db
+              .select()
+              .from(postCommunitiesTable)
+              .innerJoin(
+                communitiesTable,
+                eq(postCommunitiesTable.communityId, communitiesTable.id),
+              )
+              .where(
+                and(
+                  eq(postCommunitiesTable.postId, postsTable.id),
+                  eq(communitiesTable.isPublic, false),
+                ),
+              ),
+          ),
+        ),
+      );
+    }
+
+    // Step 1: Get matching post IDs (filtered in SQL)
+    const postIdsResult = await db
+      .select({ id: postCollectionsTable.postId })
       .from(postCollectionsTable)
-      .where(eq(postCollectionsTable.collectionId, collectionId));
+      .innerJoin(postsTable, eq(postCollectionsTable.postId, postsTable.id))
+      .where(and(...baseConditions))
+      .orderBy(desc(postsTable.createdAt))
+      .limit(limit)
+      .offset(offset);
 
-    const ids = postIds.map((r) => r.postId);
-
+    const ids = postIdsResult.map((r) => r.id);
     if (ids.length === 0) return [];
 
-    // Step 2: Fetch full post data without limit (we paginate after filtering)
+    // Step 2: Fetch full post data for selected IDs
     const posts = await db.query.postsTable.findMany({
       where: (post, { inArray }) => inArray(post.id, ids),
       with: {
@@ -993,36 +1321,12 @@ export class PostsService {
           with: { community: true },
         },
       },
-      orderBy: (posts, { desc }) => [desc(posts.createdAt)],
+      orderBy: (post, { desc }) => [desc(post.createdAt)],
     });
 
-    // Step 3: Filter hidden sources if necessary
-    const filtered = includeHiddenSources
-      ? posts
-      : posts.filter((post) => {
-          if (post.isPublic === false) return false;
-
-          const hasHiddenCategory = post.categories.some(
-            (c) => c.category?.isPublic === false,
-          );
-          const hasHiddenCollection = post.collections.some(
-            (c) => c.collection?.isPublic === false,
-          );
-          const hasHiddenCommunity = post.communities.some(
-            (c) => c.community?.isPublic === false,
-          );
-
-          return (
-            !hasHiddenCategory && !hasHiddenCollection && !hasHiddenCommunity
-          );
-        });
-
-    // Step 4: Apply offset and limit after filtering
-    const paginated = filtered.slice(offset, offset + limit);
-
-    // Step 5: Map + sign files
+    // Step 3: Map signed URLs + flatten relations
     return Promise.all(
-      paginated.map(async (post) => ({
+      posts.map(async (post) => ({
         ...post,
         files: await Promise.all(
           post.files.map(async (file) => ({
@@ -1040,18 +1344,22 @@ export class PostsService {
     );
   }
 
-  // async getPaginatedPostsByCommunity(
+  // async getPaginatedPostsByCommunityOld(
   //   communityId: number,
   //   limit: number,
   //   offset: number,
+  //   includeHiddenSources: boolean = false,
   // ) {
+  //   // Step 1: Get all post IDs related to the community
   //   const postIds = await db
   //     .select({ postId: postCommunitiesTable.postId })
   //     .from(postCommunitiesTable)
   //     .where(eq(postCommunitiesTable.communityId, communityId));
 
   //   const ids = postIds.map((r) => r.postId);
+  //   if (ids.length === 0) return [];
 
+  //   // Step 2: Fetch all related posts (no pagination yet)
   //   const posts = await db.query.postsTable.findMany({
   //     where: (post, { inArray }) => inArray(post.id, ids),
   //     with: {
@@ -1072,13 +1380,36 @@ export class PostsService {
   //         with: { community: true },
   //       },
   //     },
-  //     limit,
-  //     offset,
   //     orderBy: (posts, { desc }) => [desc(posts.createdAt)],
   //   });
 
+  //   // Step 3: Apply visibility filter
+  //   const filtered = includeHiddenSources
+  //     ? posts
+  //     : posts.filter((post) => {
+  //         if (!post.isPublic) return false;
+
+  //         const hasHiddenCategory = post.categories.some(
+  //           (c) => c.category?.isPublic === false,
+  //         );
+  //         const hasHiddenCollection = post.collections.some(
+  //           (c) => c.collection?.isPublic === false,
+  //         );
+  //         const hasHiddenCommunity = post.communities.some(
+  //           (c) => c.community?.isPublic === false,
+  //         );
+
+  //         return (
+  //           !hasHiddenCategory && !hasHiddenCollection && !hasHiddenCommunity
+  //         );
+  //       });
+
+  //   // Step 4: Slice after filtering for pagination
+  //   const paginated = filtered.slice(offset, offset + limit);
+
+  //   // Step 5: Return mapped result with signed file URLs
   //   return Promise.all(
-  //     posts.map(async (post) => ({
+  //     paginated.map(async (post) => ({
   //       ...post,
   //       files: await Promise.all(
   //         post.files.map(async (file) => ({
@@ -1095,22 +1426,88 @@ export class PostsService {
   //     })),
   //   );
   // }
+
   async getPaginatedPostsByCommunity(
     communityId: number,
     limit: number,
     offset: number,
     includeHiddenSources: boolean = false,
   ) {
-    // Step 1: Get all post IDs related to the community
-    const postIds = await db
-      .select({ postId: postCommunitiesTable.postId })
-      .from(postCommunitiesTable)
-      .where(eq(postCommunitiesTable.communityId, communityId));
+    const baseConditions: any[] = [
+      eq(postCommunitiesTable.communityId, communityId),
+    ];
 
-    const ids = postIds.map((r) => r.postId);
+    if (!includeHiddenSources) {
+      baseConditions.push(
+        eq(postsTable.isPublic, true),
+        not(
+          exists(
+            db
+              .select()
+              .from(postCategoriesTable)
+              .innerJoin(
+                categoriesTable,
+                eq(postCategoriesTable.categoryId, categoriesTable.id),
+              )
+              .where(
+                and(
+                  eq(postCategoriesTable.postId, postsTable.id),
+                  eq(categoriesTable.isPublic, false),
+                ),
+              ),
+          ),
+        ),
+        not(
+          exists(
+            db
+              .select()
+              .from(postCollectionsTable)
+              .innerJoin(
+                collectionsTable,
+                eq(postCollectionsTable.collectionId, collectionsTable.id),
+              )
+              .where(
+                and(
+                  eq(postCollectionsTable.postId, postsTable.id),
+                  eq(collectionsTable.isPublic, false),
+                ),
+              ),
+          ),
+        ),
+        not(
+          exists(
+            db
+              .select()
+              .from(postCommunitiesTable)
+              .innerJoin(
+                communitiesTable,
+                eq(postCommunitiesTable.communityId, communitiesTable.id),
+              )
+              .where(
+                and(
+                  eq(postCommunitiesTable.postId, postsTable.id),
+                  eq(communitiesTable.isPublic, false),
+                ),
+              ),
+          ),
+        ),
+      );
+    }
+
+    // Step 1: Get post IDs with visibility + pagination applied
+    const postIdsResult = await db
+      .select({ id: postCommunitiesTable.postId })
+      .from(postCommunitiesTable)
+      .innerJoin(postsTable, eq(postCommunitiesTable.postId, postsTable.id))
+      .where(and(...baseConditions))
+      .orderBy(desc(postsTable.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    const ids = postIdsResult.map((r) => r.id);
     if (ids.length === 0) return [];
 
-    // Step 2: Fetch all related posts (no pagination yet)
+    // Step 2: Load full post records for the selected IDs
     const posts = await db.query.postsTable.findMany({
       where: (post, { inArray }) => inArray(post.id, ids),
       with: {
@@ -1131,36 +1528,12 @@ export class PostsService {
           with: { community: true },
         },
       },
-      orderBy: (posts, { desc }) => [desc(posts.createdAt)],
+      orderBy: (post, { desc }) => [desc(post.createdAt)],
     });
 
-    // Step 3: Apply visibility filter
-    const filtered = includeHiddenSources
-      ? posts
-      : posts.filter((post) => {
-          if (!post.isPublic) return false;
-
-          const hasHiddenCategory = post.categories.some(
-            (c) => c.category?.isPublic === false,
-          );
-          const hasHiddenCollection = post.collections.some(
-            (c) => c.collection?.isPublic === false,
-          );
-          const hasHiddenCommunity = post.communities.some(
-            (c) => c.community?.isPublic === false,
-          );
-
-          return (
-            !hasHiddenCategory && !hasHiddenCollection && !hasHiddenCommunity
-          );
-        });
-
-    // Step 4: Slice after filtering for pagination
-    const paginated = filtered.slice(offset, offset + limit);
-
-    // Step 5: Return mapped result with signed file URLs
+    // Step 3: Attach signed URLs and flatten relations
     return Promise.all(
-      paginated.map(async (post) => ({
+      posts.map(async (post) => ({
         ...post,
         files: await Promise.all(
           post.files.map(async (file) => ({
